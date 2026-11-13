@@ -509,9 +509,14 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
         var best: Pair<String, String>? = null
         var bestScore = 0
         try {
-            val phone = ContactsContract.CommonDataKinds.Phone
             contentResolver.query(
-                phone.CONTENT_URI, arrayOf(phone.DISPLAY_NAME, phone.NUMBER, phone.TYPE), null, null, null
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.TYPE
+                ),
+                null, null, null
             )?.use { c ->
                 while (c.moveToNext()) {
                     val name = c.getString(0) ?: continue
@@ -525,7 +530,7 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
                         else -> 0
                     }
                     if (score == 0) continue
-                    if (c.getInt(2) == phone.TYPE_MOBILE) score += 5
+                    if (c.getInt(2) == ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE) score += 5
                     if (score > bestScore) {
                         bestScore = score
                         best = Pair(name, number)
