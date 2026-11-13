@@ -14,7 +14,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -24,8 +26,10 @@ import android.provider.ContactsContract
 import android.speech.tts.TextToSpeech
 import android.telecom.TelecomManager
 import android.telephony.TelephonyManager
+import android.util.Base64
 import android.view.KeyEvent
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.util.Locale
 
@@ -60,6 +64,8 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
     @Volatile private var ttsReady = false
 
     private val main = Handler(Looper.getMainLooper())
+    private val audioQueue = java.util.ArrayDeque<File>()
+    private var player: MediaPlayer? = null
     private var ringing = false
     private var ringSent = false
     private var inCall = false
@@ -241,6 +247,9 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
             "VOLDOWN" -> volume(AudioManager.ADJUST_LOWER)
             "ANSWER" -> answerCall()
             "HANGUP" -> endCall()
+            "VOL" -> volumePercent(arg.trim().toIntOrNull())
+            "AUDIO" -> playAudio(arg)          // la voz de Talos, generada en la PC
+            "TEXT" -> Link.addLog("Talos: $arg") // lo que dice ese audio, para la pantalla
             "SAY" -> speak(arg)
             else -> Link.addLog("(orden desconocida: $text)")
         }
@@ -255,6 +264,63 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
     private fun volume(direction: Int) {
         val audio = getSystemService(AudioManager::class.java)
         repeat(2) { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI) }
+    }
+
+    private fun volumePercent(percent: Int?) {
+        if (percent == null) return
+        val audio = getSystemService(AudioManager::class.java)
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val level = Math.round(percent.coerceIn(0, 100) * max / 100f)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, level, AudioManager.FLAG_SHOW_UI)
+    }
+
+    /** Reproduce, una tras otra, las frases que manda la PC con la voz de Talos. */
+    private fun playAudio(base64: String) {
+        try {
+            val file = File(cacheDir, "voz-" + System.nanoTime() + ".mp3")
+            file.writeBytes(Base64.decode(base64, Base64.DEFAULT))
+            main.post {
+                audioQueue.addLast(file)
+                if (player == null) playNext()
+            }
+        } catch (e: Exception) {
+            Link.addLog("(no pude reproducir la voz: ${e.message})")
+        }
+    }
+
+    private fun playNext() {
+        val file = audioQueue.pollFirst() ?: return
+        val p = MediaPlayer()
+        player = p
+        try {
+            p.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            p.setDataSource(file.absolutePath)
+            p.setOnCompletionListener { finishAudio(p, file) }
+            p.setOnErrorListener { _, _, _ ->
+                finishAudio(p, file)
+                true
+            }
+            p.prepare()
+            p.start()
+        } catch (e: Exception) {
+            Link.addLog("(no pude reproducir la voz: ${e.message})")
+            finishAudio(p, file)
+        }
+    }
+
+    private fun finishAudio(p: MediaPlayer, file: File) {
+        try {
+            p.release()
+        } catch (_: Exception) {
+        }
+        file.delete()
+        if (player === p) player = null
+        playNext()
     }
 
     private fun has(permission: String) = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED

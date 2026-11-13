@@ -20,5 +20,6 @@ Una línea de texto por mensaje, sobre el puerto serie de Bluetooth (SPP).
 | Teléfono → PC | `texto` | Frase para Talos |
 | Teléfono → PC | `#CALL nombre` / `#CALLSTART` / `#CALLEND` | Llamada entrante, contestada, terminada |
 | PC → Teléfono | `texto` | Respuesta de Talos (se lee en voz alta) |
-| PC → Teléfono | `#PLAY` `#PAUSE` `#NEXT` `#PREV` `#VOLUP` `#VOLDOWN` | Música |
+| PC → Teléfono | `#AUDIO base64` + `#TEXT texto` | La voz de Talos (MP3) y su texto para la pantalla |
+| PC → Teléfono | `#PLAY` `#PAUSE` `#NEXT` `#PREV` `#VOLUP` `#VOLDOWN` `#VOL 0-100` | Música |
 | PC → Teléfono | `#ANSWER` `#HANGUP` | Llamadas |
