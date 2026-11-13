@@ -504,7 +504,11 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
 
     /** "nombre|numero" del contacto que mejor coincide, o "|" si no hay ninguno. */
     private fun findContact(wanted: String): String {
-        if (!has(Manifest.permission.READ_CONTACTS) || wanted.isBlank()) return "|"
+        if (!has(Manifest.permission.READ_CONTACTS)) {
+            Link.addLog("(falta el permiso de contactos: actívalo en Ajustes > Apps > Talos > Permisos)")
+            return "||NOPERM"
+        }
+        if (wanted.isBlank()) return "|"
         val target = plain(wanted)
         var best: Pair<String, String>? = null
         var bestScore = 0
