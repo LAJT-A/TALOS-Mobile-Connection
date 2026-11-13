@@ -301,6 +301,7 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
                     }
                 }
             }
+            "CONTACT" -> Link.send("#NUMBER " + arg.trim() + "|" + findContact(arg.trim()))
             "VOL" -> volumePercent(arg.trim().toIntOrNull())
             "AUDIO" -> playAudio(arg)          // la voz de Talos, generada en la PC
             "TEXT" -> Link.addLog("Talos: $arg") // lo que dice ese audio, para la pantalla
@@ -375,7 +376,14 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
         val audio = getSystemService(AudioManager::class.java)
         val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val level = Math.round(percent.coerceIn(0, 100) * max / 100f)
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, level, AudioManager.FLAG_SHOW_UI)
+        try {
+            audio.setStreamVolume(AudioManager.STREAM_MUSIC, level, AudioManager.FLAG_SHOW_UI)
+            val now = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            Link.addLog("(volumen pedido $percent% → quedó en $now de $max)")
+        } catch (e: Exception) {
+            Link.addLog("(no pude cambiar el volumen: ${e.message})")
+            Link.send("#ERROR I could not change the phone volume: ${e.message}")
+        }
     }
 
     /** Reproduce, una tras otra, las frases que manda la PC con la voz de Talos. */
@@ -488,6 +496,46 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
         val who = if (number.isNullOrBlank()) "unknown" else (contactName(number) ?: number)
         Link.addLog("(llamada de $who)")
         Link.send("#CALL $who")
+    }
+
+    private fun plain(text: String): String =
+        java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "").lowercase(Locale.ROOT).trim()
+
+    /** "nombre|numero" del contacto que mejor coincide, o "|" si no hay ninguno. */
+    private fun findContact(wanted: String): String {
+        if (!has(Manifest.permission.READ_CONTACTS) || wanted.isBlank()) return "|"
+        val target = plain(wanted)
+        var best: Pair<String, String>? = null
+        var bestScore = 0
+        try {
+            val phone = ContactsContract.CommonDataKinds.Phone
+            contentResolver.query(
+                phone.CONTENT_URI, arrayOf(phone.DISPLAY_NAME, phone.NUMBER, phone.TYPE), null, null, null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val name = c.getString(0) ?: continue
+                    val number = c.getString(1) ?: continue
+                    val key = plain(name)
+                    var score = when {
+                        key == target -> 100
+                        key.startsWith("$target ") -> 80
+                        key.split(" ").contains(target) -> 70
+                        key.contains(target) -> 50
+                        else -> 0
+                    }
+                    if (score == 0) continue
+                    if (c.getInt(2) == phone.TYPE_MOBILE) score += 5
+                    if (score > bestScore) {
+                        bestScore = score
+                        best = Pair(name, number)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        val found = best ?: return "|"
+        return found.first.replace("|", " ") + "|" + found.second
     }
 
     private fun contactName(number: String): String? {

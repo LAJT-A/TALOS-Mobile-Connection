@@ -230,7 +230,12 @@ class MainActivity : Activity() {
 
     private fun refresh() {
         val name = getSharedPreferences(LinkService.PREFS, MODE_PRIVATE).getString(LinkService.KEY_NAME, null)
-        statusView.text = if (name == null) "Toca aquí para elegir tu PC" else "${Link.status} · $name"
+        val version = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (e: Exception) {
+            "?"
+        }
+        statusView.text = (if (name == null) "Toca aquí para elegir tu PC" else "${Link.status} · $name") + "  ·  v$version"
         statusView.setTextColor(if (Link.connected) cyan else Color.parseColor("#8FA3AD"))
         songsButton.visibility = if (LinkService.mediaAccess(this)) View.GONE else View.VISIBLE
         val apps = Link.apps
