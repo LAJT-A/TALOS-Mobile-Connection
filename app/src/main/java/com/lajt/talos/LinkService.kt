@@ -54,6 +54,7 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
     @Volatile private var address: String? = null
     @Volatile private var socket: BluetoothSocket? = null
     private var worker: Thread? = null
+    private var lastError = ""
 
     private var tts: TextToSpeech? = null
     @Volatile private var ttsReady = false
@@ -145,7 +146,6 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
                 val device = adapter.getRemoteDevice(target)
                 val sock = device.createRfcommSocketToServiceRecord(Link.SPP)
                 socket = sock
-                adapter.cancelDiscovery()
                 sock.connect()
                 Link.setOutput(sock.outputStream)
                 setStatus("Conectado", true)
@@ -155,18 +155,29 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
                     val text = line.trim()
                     if (text.isNotEmpty()) handle(text)
                 }
+                lastError = ""
             } catch (e: SecurityException) {
                 setStatus("Falta el permiso de Bluetooth", false)
+                report("permiso: ${e.message}")
             } catch (e: Exception) {
                 // PC apagada, Talos cerrado o fuera de alcance: se reintenta solo
+                report("no pude conectar: ${e.message}")
             } finally {
                 Link.setOutput(null)
                 closeSocket()
             }
             if (running) {
-                if (Link.connected || Link.status == "Conectando…") setStatus("Buscando la PC…", false)
+                if (Link.status != "Falta el permiso de Bluetooth") setStatus("Buscando la PC…", false)
                 sleep(5000)
             }
+        }
+    }
+
+    /** Escribe el motivo del fallo una sola vez, no en cada reintento. */
+    private fun report(reason: String) {
+        if (reason != lastError) {
+            lastError = reason
+            Link.addLog("($reason)")
         }
     }
 
