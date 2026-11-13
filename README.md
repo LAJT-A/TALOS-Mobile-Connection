@@ -22,4 +22,8 @@ Una línea de texto por mensaje, sobre el puerto serie de Bluetooth (SPP).
 | PC → Teléfono | `texto` | Respuesta de Talos (se lee en voz alta) |
 | PC → Teléfono | `#AUDIO base64` + `#TEXT texto` | La voz de Talos (MP3) y su texto para la pantalla |
 | PC → Teléfono | `#PLAY` `#PAUSE` `#NEXT` `#PREV` `#VOLUP` `#VOLDOWN` `#VOL 0-100` | Música |
+| PC → Teléfono | `#PLAYSEARCH texto` | Busca y pone una canción en el teléfono |
 | PC → Teléfono | `#ANSWER` `#HANGUP` | Llamadas |
+| PC → Teléfono | `#APPS a|b|c` | Lista de apps de la PC para el menú |
+| Teléfono → PC | `#APPS` / `#OPEN nombre` | Pide la lista / abre una app en la PC |
+| Teléfono → PC | `#PLAYING título|artista` | Lo que empezó a sonar |

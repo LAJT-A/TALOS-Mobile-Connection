@@ -5,10 +5,12 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.SearchManager
 import android.app.Service
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -16,13 +18,18 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.MediaMetadata
 import android.media.MediaPlayer
+import android.media.session.MediaController
+import android.media.session.MediaSessionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.ContactsContract
+import android.provider.MediaStore
+import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.telecom.TelecomManager
 import android.telephony.TelephonyManager
@@ -46,7 +53,14 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
         const val PREFS = "talos"
         const val KEY_ADDRESS = "address"
         const val KEY_NAME = "name"
+        const val KEY_APPS = "apps"
         private const val CHANNEL = "talos_link"
+
+        /** True si el usuario ya dio el "acceso a notificaciones" (hace falta para elegir canciones). */
+        fun mediaAccess(context: Context): Boolean {
+            val enabled = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+            return enabled != null && enabled.contains(context.packageName)
+        }
 
         fun start(context: Context) {
             val intent = Intent(context, LinkService::class.java)
@@ -97,6 +111,10 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
             Link.addLog("(no pude quedarme en segundo plano: ${e.message})")
         }
         tts = TextToSpeech(this, this)
+        val saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_APPS, null)
+        if (saved != null && Link.apps.isEmpty()) {
+            Link.setApps(saved.split("|").map { it.trim() }.filter { it.isNotEmpty() })
+        }
         val filter = IntentFilter(TelephonyManager.ACTION_PHONE_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(phoneReceiver, filter, Context.RECEIVER_EXPORTED)
@@ -155,6 +173,7 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
                 sock.connect()
                 Link.setOutput(sock.outputStream)
                 setStatus("Conectado", true)
+                Link.send("#APPS") // pide la lista de apps de la PC para el menu
                 val reader = BufferedReader(InputStreamReader(sock.inputStream, Charsets.UTF_8))
                 while (running) {
                     val line = reader.readLine() ?: break
@@ -247,6 +266,12 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
             "VOLDOWN" -> volume(AudioManager.ADJUST_LOWER)
             "ANSWER" -> answerCall()
             "HANGUP" -> endCall()
+            "PLAYSEARCH" -> playFromSearch(arg)
+            "APPS" -> {
+                val list = arg.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                Link.setApps(list)
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_APPS, arg).apply()
+            }
             "VOL" -> volumePercent(arg.trim().toIntOrNull())
             "AUDIO" -> playAudio(arg)          // la voz de Talos, generada en la PC
             "TEXT" -> Link.addLog("Talos: $arg") // lo que dice ese audio, para la pantalla
@@ -264,6 +289,56 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
     private fun volume(direction: Int) {
         val audio = getSystemService(AudioManager::class.java)
         repeat(2) { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI) }
+    }
+
+    /** Busca y pone una cancion en la app de musica del telefono (Spotify si esta). */
+    private fun playFromSearch(query: String) {
+        if (query.isBlank()) return
+        if (!mediaAccess(this)) {
+            Link.addLog("(para poner canciones, toca \"Permitir elegir canciones\" abajo)")
+            Link.send("#ERROR I need one more permission on the phone to choose songs. Open the Talos app and allow it.")
+            return
+        }
+        try {
+            val sessions = getSystemService(MediaSessionManager::class.java)
+                .getActiveSessions(ComponentName(this, MediaAccess::class.java))
+            val target = sessions.firstOrNull { it.packageName == "com.spotify.music" } ?: sessions.firstOrNull()
+            if (target == null) {
+                openMusicSearch(query)
+                return
+            }
+            target.transportControls.playFromSearch(query, null)
+            Link.addLog("(buscando \"$query\" en el teléfono)")
+            main.postDelayed({ reportPlaying(target) }, 3500)
+        } catch (e: Exception) {
+            Link.send("#ERROR I could not play that on the phone: ${e.message}")
+        }
+    }
+
+    /** Sin ninguna app de musica abierta: intenta abrir Spotify con la busqueda. */
+    private fun openMusicSearch(query: String) {
+        val intent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
+            setPackage("com.spotify.music")
+            putExtra(SearchManager.QUERY, query)
+            putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            startActivity(intent)
+            Link.addLog("(abriendo Spotify con \"$query\")")
+        } catch (e: Exception) {
+            Link.send("#ERROR Spotify is not open on the phone. Open it once and ask me again.")
+        }
+    }
+
+    private fun reportPlaying(controller: MediaController) {
+        try {
+            val data = controller.metadata ?: return
+            val title = data.getString(MediaMetadata.METADATA_KEY_TITLE) ?: return
+            val artist = data.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: ""
+            Link.send("#PLAYING $title|$artist")
+        } catch (_: Exception) {
+        }
     }
 
     private fun volumePercent(percent: Int?) {

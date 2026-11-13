@@ -11,9 +11,12 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.text.Editable
+import android.text.TextWatcher
 import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
@@ -21,8 +24,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.ScrollView
 import android.widget.TextView
 import java.util.Locale
@@ -39,6 +44,9 @@ class MainActivity : Activity() {
     private lateinit var scroll: ScrollView
     private lateinit var input: EditText
     private lateinit var talkButton: Button
+    private lateinit var songsButton: Button
+    private var appsAdapter: ArrayAdapter<String>? = null
+    private var appsShown: List<String> = emptyList()
 
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
@@ -168,15 +176,53 @@ class MainActivity : Activity() {
             topMargin = dp(14)
         })
 
+        val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val appsButton = Button(this).apply {
+            text = "Apps de la PC"
+            isAllCaps = false
+            textSize = 14f
+            setTextColor(cyan)
+            background = rounded(panel, 24)
+            setOnClickListener { showApps() }
+        }
+        bottom.addView(appsButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val pcButton = Button(this).apply {
             text = "Elegir PC"
             isAllCaps = false
-            textSize = 13f
+            textSize = 14f
             setTextColor(Color.parseColor("#8FA3AD"))
-            setBackgroundColor(Color.TRANSPARENT)
+            background = rounded(panel, 24)
             setOnClickListener { pickDevice() }
         }
-        root.addView(pcButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        bottom.addView(pcButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(8)
+        })
+        root.addView(bottom, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(12)
+        })
+
+        // Solo se ve mientras falte el permiso que deja elegir canciones en el telefono.
+        songsButton = Button(this).apply {
+            text = "Permitir elegir canciones en el teléfono"
+            isAllCaps = false
+            textSize = 13f
+            setTextColor(Color.parseColor("#FFC857"))
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener {
+                AlertDialog.Builder(this@MainActivity)
+                    .setMessage("Para que Talos pueda buscar y poner una canción en Spotify del teléfono, Android pide activar el \"acceso a notificaciones\" para Talos. La app no lee tus notificaciones.")
+                    .setPositiveButton("Abrir ajustes") { _, _ ->
+                        try {
+                            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        } catch (e: Exception) {
+                            Link.addLog("(no pude abrir los ajustes: busca \"Acceso a notificaciones\" en Ajustes)")
+                        }
+                    }
+                    .setNegativeButton("Ahora no", null)
+                    .show()
+            }
+        }
+        root.addView(songsButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         return root
     }
 
@@ -184,6 +230,16 @@ class MainActivity : Activity() {
         val name = getSharedPreferences(LinkService.PREFS, MODE_PRIVATE).getString(LinkService.KEY_NAME, null)
         statusView.text = if (name == null) "Toca aquí para elegir tu PC" else "${Link.status} · $name"
         statusView.setTextColor(if (Link.connected) cyan else Color.parseColor("#8FA3AD"))
+        songsButton.visibility = if (LinkService.mediaAccess(this)) View.GONE else View.VISIBLE
+        val apps = Link.apps
+        if (apps != appsShown) { // llego la lista mientras el menu estaba abierto
+            appsShown = apps
+            appsAdapter?.let {
+                it.clear()
+                it.addAll(apps)
+                it.notifyDataSetChanged()
+            }
+        }
         val text = Link.logText()
         if (logView.text.toString() != text) {
             logView.text = text
@@ -268,6 +324,59 @@ class MainActivity : Activity() {
                 refresh()
             }
             .show()
+    }
+
+    // ------------------------------------------------------------------ menu de apps de la PC
+
+    private fun showApps() {
+        Link.send("#APPS") // refresca la lista por si instalaste algo
+        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, ArrayList(Link.apps))
+        appsAdapter = adapter
+        appsShown = Link.apps
+
+        val search = EditText(this).apply {
+            hint = "Buscar app"
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val list = ListView(this).apply { this.adapter = adapter }
+        val empty = TextView(this).apply {
+            text = "Aún no llega la lista. Conéctate a la PC y vuelve a abrir este menú."
+            setPadding(dp(8), dp(16), dp(8), dp(16))
+            visibility = if (adapter.count == 0) View.VISIBLE else View.GONE
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(search)
+            addView(empty)
+            addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(420)))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Abrir en la PC")
+            .setView(box)
+            .setNegativeButton("Cerrar", null)
+            .setOnDismissListener { appsAdapter = null }
+            .create()
+
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                // "contiene", no solo "empieza por": escribir "code" encuentra "Visual Studio Code"
+                val wanted = s.toString().trim().lowercase(Locale.ROOT)
+                adapter.clear()
+                adapter.addAll(Link.apps.filter { it.lowercase(Locale.ROOT).contains(wanted) })
+                adapter.notifyDataSetChanged()
+            }
+        })
+        list.setOnItemClickListener { _, _, position, _ ->
+            val name = adapter.getItem(position) ?: return@setOnItemClickListener
+            Link.addLog("Tú: abrir $name")
+            Link.send("#OPEN $name")
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     // ------------------------------------------------------------------ hablar y escribir

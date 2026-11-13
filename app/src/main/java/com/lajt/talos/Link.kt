@@ -19,6 +19,15 @@ object Link {
     /** La pantalla se apunta aqui para redibujarse cuando algo cambia. */
     @Volatile var listener: (() -> Unit)? = null
 
+    /** Apps de la PC, para el menu. Las manda la PC cuando se le pide con #APPS. */
+    @Volatile var apps: List<String> = emptyList()
+        private set
+
+    fun setApps(list: List<String>) {
+        apps = list
+        notifyUi()
+    }
+
     private val log = StringBuilder()
     private val main = Handler(Looper.getMainLooper())
     private val writer = Executors.newSingleThreadExecutor()
