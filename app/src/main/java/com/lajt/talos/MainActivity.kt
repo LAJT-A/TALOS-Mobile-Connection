@@ -24,7 +24,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
@@ -45,8 +44,11 @@ class MainActivity : Activity() {
     private lateinit var input: EditText
     private lateinit var talkButton: Button
     private lateinit var songsButton: Button
-    private var appsAdapter: ArrayAdapter<String>? = null
+    private var appsAdapter: AppsAdapter? = null
     private var appsShown: List<String> = emptyList()
+    private var appsFilter = ""
+    private var appsEmpty: TextView? = null
+    private var iconsSeen = 0
 
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
@@ -234,11 +236,12 @@ class MainActivity : Activity() {
         val apps = Link.apps
         if (apps != appsShown) { // llego la lista mientras el menu estaba abierto
             appsShown = apps
-            appsAdapter?.let {
-                it.clear()
-                it.addAll(apps)
-                it.notifyDataSetChanged()
-            }
+            appsAdapter?.setItems(filteredApps())
+            appsEmpty?.visibility = if (apps.isEmpty()) View.VISIBLE else View.GONE
+        }
+        if (Link.iconVersion != iconsSeen) { // llegaron logos nuevos
+            iconsSeen = Link.iconVersion
+            appsAdapter?.notifyDataSetChanged()
         }
         val text = Link.logText()
         if (logView.text.toString() != text) {
@@ -328,11 +331,16 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------------ menu de apps de la PC
 
+    /** "contiene", no solo "empieza por": escribir "code" encuentra "Visual Studio Code". */
+    private fun filteredApps(): List<String> =
+        Link.apps.filter { it.lowercase(Locale.ROOT).contains(appsFilter) }
+
     private fun showApps() {
         Link.send("#APPS") // refresca la lista por si instalaste algo
-        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, ArrayList(Link.apps))
-        appsAdapter = adapter
+        appsFilter = ""
         appsShown = Link.apps
+        val adapter = AppsAdapter(this, filteredApps())
+        appsAdapter = adapter
 
         val search = EditText(this).apply {
             hint = "Buscar app"
@@ -341,10 +349,11 @@ class MainActivity : Activity() {
         }
         val list = ListView(this).apply { this.adapter = adapter }
         val empty = TextView(this).apply {
-            text = "Aún no llega la lista. Conéctate a la PC y vuelve a abrir este menú."
+            text = "Aún no llega la lista. Revisa que diga \"Conectado\" y que Talos esté abierto en la PC."
             setPadding(dp(8), dp(16), dp(8), dp(16))
-            visibility = if (adapter.count == 0) View.VISIBLE else View.GONE
+            visibility = if (Link.apps.isEmpty()) View.VISIBLE else View.GONE
         }
+        appsEmpty = empty
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), 0)
@@ -356,22 +365,22 @@ class MainActivity : Activity() {
             .setTitle("Abrir en la PC")
             .setView(box)
             .setNegativeButton("Cerrar", null)
-            .setOnDismissListener { appsAdapter = null }
+            .setOnDismissListener {
+                appsAdapter = null
+                appsEmpty = null
+            }
             .create()
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                // "contiene", no solo "empieza por": escribir "code" encuentra "Visual Studio Code"
-                val wanted = s.toString().trim().lowercase(Locale.ROOT)
-                adapter.clear()
-                adapter.addAll(Link.apps.filter { it.lowercase(Locale.ROOT).contains(wanted) })
-                adapter.notifyDataSetChanged()
+                appsFilter = s.toString().trim().lowercase(Locale.ROOT)
+                adapter.setItems(filteredApps())
             }
         })
         list.setOnItemClickListener { _, _, position, _ ->
-            val name = adapter.getItem(position) ?: return@setOnItemClickListener
+            val name = adapter.getItem(position)
             Link.addLog("Tú: abrir $name")
             Link.send("#OPEN $name")
             dialog.dismiss()

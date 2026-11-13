@@ -271,6 +271,9 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
                 val list = arg.split("|").map { it.trim() }.filter { it.isNotEmpty() }
                 Link.setApps(list)
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_APPS, arg).apply()
+                // Pide solo los logos que todavia no estan guardados en el telefono.
+                val missing = list.filter { !Link.iconFile(this, it).exists() }.map { Link.iconKey(it) }
+                if (missing.isNotEmpty()) Link.send("#ICONS " + missing.joinToString(","))
             }
             "WAREPLY" -> {
                 val who = arg.substringBefore("|").trim()
@@ -284,6 +287,18 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
                     }
                 } catch (e: Exception) {
                     Link.send("#ERROR I could not send the WhatsApp reply: ${e.message}")
+                }
+            }
+            "ICON" -> {
+                val key = arg.substringBefore(" ")
+                if (key.matches(Regex("[0-9a-f]{12}"))) {
+                    try {
+                        val folder = File(filesDir, "icons")
+                        folder.mkdirs()
+                        File(folder, "$key.png").writeBytes(Base64.decode(arg.substringAfter(" ", ""), Base64.DEFAULT))
+                        Link.iconArrived()
+                    } catch (_: Exception) {
+                    }
                 }
             }
             "VOL" -> volumePercent(arg.trim().toIntOrNull())

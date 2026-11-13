@@ -26,6 +26,8 @@ Una línea de texto por mensaje, sobre el puerto serie de Bluetooth (SPP).
 | PC → Teléfono | `#ANSWER` `#HANGUP` | Llamadas |
 | PC → Teléfono | `#APPS a|b|c` | Lista de apps de la PC para el menú |
 | Teléfono → PC | `#APPS` / `#OPEN nombre` | Pide la lista / abre una app en la PC |
+| Teléfono → PC | `#ICONS clave,clave` | Pide los logos que le faltan |
+| PC → Teléfono | `#ICON clave base64` | Logo (PNG) de una app |
 | Teléfono → PC | `#PLAYING título|artista` | Lo que empezó a sonar |
 | Teléfono → PC | `#WA nombre|mensaje` | Llegó un WhatsApp (chats, no grupos) |
 | PC → Teléfono | `#WAREPLY nombre|mensaje` | Responde ese chat desde su notificación |

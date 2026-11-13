@@ -1,8 +1,12 @@
 package com.lajt.talos
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import java.io.File
 import java.io.OutputStream
+import java.security.MessageDigest
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
 
@@ -23,9 +27,35 @@ object Link {
     @Volatile var apps: List<String> = emptyList()
         private set
 
+    /** Sube cada vez que llega un logo, para que el menu se redibuje. */
+    @Volatile var iconVersion = 0
+        private set
+    private var iconNoticePending = false
+
     fun setApps(list: List<String>) {
         apps = list
         notifyUi()
+    }
+
+    /** Mismo calculo que hace la PC: asi los dos lados nombran igual el logo de cada app. */
+    fun iconKey(name: String): String {
+        val digest = MessageDigest.getInstance("MD5").digest(name.lowercase(Locale.ROOT).toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }.substring(0, 12)
+    }
+
+    fun iconFile(context: Context, name: String): File = File(File(context.filesDir, "icons"), iconKey(name) + ".png")
+
+    /** Llego un logo. Avisa a la pantalla como mucho dos veces por segundo. */
+    fun iconArrived() {
+        iconVersion++
+        synchronized(this) {
+            if (iconNoticePending) return
+            iconNoticePending = true
+        }
+        main.postDelayed({
+            synchronized(this) { iconNoticePending = false }
+            listener?.invoke()
+        }, 500)
     }
 
     private val log = StringBuilder()
