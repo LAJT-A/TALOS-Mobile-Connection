@@ -272,6 +272,20 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
                 Link.setApps(list)
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_APPS, arg).apply()
             }
+            "WAREPLY" -> {
+                val who = arg.substringBefore("|").trim()
+                val message = arg.substringAfter("|", "").trim()
+                try {
+                    val sent = if (message.isEmpty()) null else MediaAccess.reply(this, who, message)
+                    if (sent != null) {
+                        Link.addLog("(WhatsApp a $sent: $message)")
+                    } else {
+                        Link.send("#ERROR I could not reply: there is no open WhatsApp notification from $who.")
+                    }
+                } catch (e: Exception) {
+                    Link.send("#ERROR I could not send the WhatsApp reply: ${e.message}")
+                }
+            }
             "VOL" -> volumePercent(arg.trim().toIntOrNull())
             "AUDIO" -> playAudio(arg)          // la voz de Talos, generada en la PC
             "TEXT" -> Link.addLog("Talos: $arg") // lo que dice ese audio, para la pantalla
@@ -295,7 +309,7 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
     private fun playFromSearch(query: String) {
         if (query.isBlank()) return
         if (!mediaAccess(this)) {
-            Link.addLog("(para poner canciones, toca \"Permitir elegir canciones\" abajo)")
+            Link.addLog("(para poner canciones, toca \"Permitir canciones y WhatsApp\" abajo)")
             Link.send("#ERROR I need one more permission on the phone to choose songs. Open the Talos app and allow it.")
             return
         }

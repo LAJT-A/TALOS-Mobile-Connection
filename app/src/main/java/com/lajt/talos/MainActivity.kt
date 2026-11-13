@@ -203,14 +203,14 @@ class MainActivity : Activity() {
 
         // Solo se ve mientras falte el permiso que deja elegir canciones en el telefono.
         songsButton = Button(this).apply {
-            text = "Permitir elegir canciones en el teléfono"
+            text = "Permitir canciones y WhatsApp en el teléfono"
             isAllCaps = false
             textSize = 13f
             setTextColor(Color.parseColor("#FFC857"))
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
                 AlertDialog.Builder(this@MainActivity)
-                    .setMessage("Para que Talos pueda buscar y poner una canción en Spotify del teléfono, Android pide activar el \"acceso a notificaciones\" para Talos. La app no lee tus notificaciones.")
+                    .setMessage("Para poner una canción en Spotify del teléfono y para avisarte y responder mensajes de WhatsApp, Android pide activar el \"acceso a notificaciones\" para Talos. La app solo mira las notificaciones de WhatsApp.")
                     .setPositiveButton("Abrir ajustes") { _, _ ->
                         try {
                             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
