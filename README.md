@@ -1,15 +1,36 @@
-# Talos-app
+<div align="center">
 
-App de Android para hablarle a Talos (el asistente que corre en la PC) por Bluetooth.
+# TALOS Mobile Connection (TMC)
 
-- **Hablar o escribir**: lo que digas se manda a la PC y la respuesta se lee en voz alta.
-- **Música del teléfono**: la PC puede pausar, reanudar y cambiar de canción.
-- **Llamadas**: la PC se entera de quién llama y puede contestar o colgar.
+**La app de Android para usar [TALOS](https://github.com/LAJT-A/TALOS) desde tu celular.**
+
+Se conecta a la PC por Bluetooth: no necesita Wi-Fi ni datos.
+
+![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-1.9-7F52FF?logo=kotlin&logoColor=white)
+![Bluetooth](https://img.shields.io/badge/conexión-Bluetooth-0082FC?logo=bluetooth&logoColor=white)
+
+</div>
+
+---
+
+## Qué hace
+
+- **Hablarle a TALOS**: tocas *HABLAR* (o escribes), la frase viaja a la PC y la respuesta suena en el celular con la misma voz de TALOS.
+- **Música del teléfono**: TALOS pausa, reanuda, cambia de canción, ajusta el volumen y busca canciones en Spotify del celular.
+- **Llamadas**: TALOS te avisa quién llama y puede contestar o colgar.
+- **WhatsApp**: TALOS se entera de los mensajes que llegan y te los puede leer.
+- **Apps de la PC**: un menú con todas las apps de tu PC, con sus logos y buscador; tocas una y se abre en la PC.
 
 ## Instalar
 
-Cada cambio en `main` se compila solo. Descarga `Talos.apk` desde
-[Releases](../../releases/latest) en el teléfono e instálalo.
+1. Descarga `Talos.apk` desde [Releases](../../releases/latest) en el celular e instálalo.
+2. Empareja el celular con la PC por Bluetooth.
+3. En Windows, crea un puerto COM **entrante**: *Configuración → Bluetooth y dispositivos → Más opciones de Bluetooth → Puertos COM → Agregar → Entrante*.
+4. Abre TMC, acepta los permisos y toca **Elegir PC**.
+5. Para canciones y WhatsApp, toca el aviso amarillo y activa el *acceso a notificaciones* para TMC.
+
+Cada cambio en `main` se compila solo con GitHub Actions y se publica en Releases.
 
 ## Protocolo
 
