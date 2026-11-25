@@ -55,6 +55,7 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
         const val KEY_NAME = "name"
         const val KEY_APPS = "apps"
         private const val CHANNEL = "talos_link"
+        private const val CHANNEL_NOTES = "talos_recados"
 
         /** True si el usuario ya dio el "acceso a notificaciones" (hace falta para elegir canciones). */
         fun mediaAccess(context: Context): Boolean {
@@ -100,6 +101,9 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL, "Conexión con la PC", NotificationManager.IMPORTANCE_LOW)
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_NOTES, "Recados para ti", NotificationManager.IMPORTANCE_HIGH)
         )
         try {
             if (Build.VERSION.SDK_INT >= 29) {
@@ -229,6 +233,27 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
+    /** Un recado que te dejaron (por ejemplo tu mama por WhatsApp), como notificacion aparte. */
+    private fun notifyNote(title: String, text: String) {
+        if (text.isEmpty()) return
+        Link.addLog("Recado: $title: $text")
+        val open = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
+        )
+        val note = Notification.Builder(this, CHANNEL_NOTES)
+            .setContentTitle(title.ifEmpty { "Talos" })
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        try {
+            getSystemService(NotificationManager::class.java).notify((System.currentTimeMillis() % 100000).toInt() + 10, note)
+        } catch (_: Exception) {
+        }
+    }
+
     private fun notification(text: String): Notification {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
@@ -306,6 +331,7 @@ class LinkService : Service(), TextToSpeech.OnInitListener {
             "AUDIO" -> playAudio(arg)          // la voz de Talos, generada en la PC
             "TEXT" -> Link.addLog("Talos: $arg") // lo que dice ese audio, para la pantalla
             "SAY" -> speak(arg)
+            "NOTIFY" -> notifyNote(arg.substringBefore("|").trim(), arg.substringAfter("|", "").trim())
             else -> Link.addLog("(orden desconocida: $text)")
         }
     }
